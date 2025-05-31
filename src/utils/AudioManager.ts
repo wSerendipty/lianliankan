@@ -9,11 +9,23 @@ class AudioManager {
   private isMuted: boolean = false;
   private isInitialized: boolean = false;
   private loadPromises: Promise<void>[] = [];
+  private bgMusicVolume: number = 0.5;
+  private soundEffectsVolume: number = 0.5;
 
   private constructor() {
     this.bgMusic = new Audio();
-    this.bgMusic.src = '/sounds/background-music.mp3';
     this.bgMusic.loop = true;
+    this.bgMusic.volume = this.bgMusicVolume;
+    this.bgMusic.src = `${import.meta.env.BASE_URL}sounds/background-music.mp3`;
+
+    this.sounds = {} as Record<string, HTMLAudioElement>;
+    
+    // 预加载音效
+    this.loadSoundEffect('select', 'select.mp3');
+    this.loadSoundEffect('match', 'match.mp3');
+    this.loadSoundEffect('levelComplete', 'level-complete.mp3');
+    this.loadSoundEffect('gameOver', 'game-over.mp3');
+
     this.loadPromises.push(
       new Promise((resolve, reject) => {
         this.bgMusic.addEventListener('canplaythrough', () => resolve(), { once: true });
@@ -24,38 +36,28 @@ class AudioManager {
       })
     );
 
-    // 创建音效对象
-    const soundFiles = {
-      select: '/sounds/select.mp3',
-      match: '/sounds/match.mp3',
-      levelComplete: '/sounds/level-complete.mp3',
-      gameOver: '/sounds/game-over.mp3'
-    };
-
-    this.sounds = {} as Record<string, HTMLAudioElement>;
-    
-    // 为每个音效创建Audio对象并添加加载Promise
-    Object.entries(soundFiles).forEach(([key, path]) => {
-      const audio = new Audio();
-      audio.src = path;
-      this.sounds[key] = audio;
-      
-      this.loadPromises.push(
-        new Promise((resolve, reject) => {
-          audio.addEventListener('canplaythrough', () => resolve(), { once: true });
-          audio.addEventListener('error', (e) => {
-            console.error(`Sound ${key} loading error:`, audio.error);
-            reject(audio.error);
-          }, { once: true });
-        })
-      );
-    });
-
     // 预加载所有音频
     Object.values(this.sounds).forEach(sound => {
       sound.load();
     });
     this.bgMusic.load();
+  }
+
+  private loadSoundEffect(name: string, filename: string) {
+    const audio = new Audio();
+    audio.volume = this.soundEffectsVolume;
+    audio.src = `${import.meta.env.BASE_URL}sounds/${filename}`;
+    this.sounds[name] = audio;
+    
+    this.loadPromises.push(
+      new Promise((resolve, reject) => {
+        audio.addEventListener('canplaythrough', () => resolve(), { once: true });
+        audio.addEventListener('error', (e) => {
+          console.error(`Sound ${name} loading error:`, audio.error);
+          reject(audio.error);
+        }, { once: true });
+      })
+    );
   }
 
   public static getInstance(): AudioManager {
