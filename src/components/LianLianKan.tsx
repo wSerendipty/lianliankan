@@ -418,18 +418,21 @@ const glowAnimation = keyframes`
 
 const glowPulse = keyframes`
   0% {
-    filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.5));
+    box-shadow: 0 0 5px rgba(72, 187, 120, 0.2);
+    border: 2px solid rgba(72, 187, 120, 0.3);
   }
   50% {
-    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8));
+    box-shadow: 0 0 12px rgba(72, 187, 120, 0.4);
+    border: 2px solid rgba(72, 187, 120, 0.5);
   }
   100% {
-    filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.5));
+    box-shadow: 0 0 5px rgba(72, 187, 120, 0.2);
+    border: 2px solid rgba(72, 187, 120, 0.3);
   }
 `;
 
-const TileButton = styled.button<{ 
-  $isSelected: boolean; 
+const TileButton = styled.button<{
+  $isSelected: boolean;
   $isMatched: boolean;
   $isInvalid?: boolean;
   $isHint?: boolean;
@@ -441,31 +444,35 @@ const TileButton = styled.button<{
   font-size: 28px;
   cursor: pointer;
   transition: all 0.3s ease;
-  background: ${props => {
+  background-color: ${props => {
     if (props.$isMatched) return 'transparent';
     if (props.$isInvalid) return 'rgba(239, 68, 68, 0.9)';
-    if (props.$isSelected) return 'rgba(72, 187, 120, 0.9)';
-    if (props.$isHint) return 'rgba(59, 130, 246, 0.9)';
+    if (props.$isSelected || props.$isHint) return 'rgba(72, 187, 120, 0.2)';
     return 'rgba(255, 255, 255, 0.9)';
   }};
   box-shadow: ${props => {
     if (props.$isMatched) return 'none';
     if (props.$isInvalid) return '0 4px 6px rgba(239, 68, 68, 0.2)';
-    if (props.$isSelected) return '0 4px 6px rgba(72, 187, 120, 0.2)';
-    if (props.$isHint) return '0 4px 6px rgba(59, 130, 246, 0.2)';
+    if (props.$isSelected) return '0 4px 6px rgba(72, 187, 120, 0.3)';
+    if (props.$isHint) return '0 4px 6px rgba(72, 187, 120, 0.2)';
     return '0 4px 6px rgba(0, 0, 0, 0.1)';
+  }};
+  border: ${props => {
+    if (props.$isMatched) return 'none';
+    if (props.$isSelected) return '2px solid rgba(72, 187, 120, 0.8)';
+    if (props.$isHint) return '2px solid rgba(72, 187, 120, 0.4)';
+    return '1px solid rgba(0, 0, 0, 0.1)';
   }};
   opacity: ${props => props.$isMatched ? 0 : 1};
   transform: ${props => (props.$isSelected || props.$isInvalid) ? 'scale(0.95)' : 'scale(1)'};
-  animation: ${props => props.$isHint ? css`${glowPulse} 1s infinite` : 'none'};
+  animation: ${props => props.$isHint ? css`${glowPulse} 1.8s ease-in-out infinite` : 'none'};
   
   &:hover {
     transform: ${props => props.$isMatched ? 'none' : (props.$isSelected || props.$isInvalid) ? 'scale(0.95)' : 'scale(1.05)'};
     box-shadow: ${props => {
       if (props.$isMatched) return 'none';
       if (props.$isInvalid) return '0 6px 8px rgba(239, 68, 68, 0.3)';
-      if (props.$isSelected) return '0 6px 8px rgba(72, 187, 120, 0.3)';
-      if (props.$isHint) return '0 6px 8px rgba(59, 130, 246, 0.3)';
+      if (props.$isSelected || props.$isHint) return '0 6px 8px rgba(72, 187, 120, 0.3)';
       return '0 6px 8px rgba(0, 0, 0, 0.2)';
     }};
   }
