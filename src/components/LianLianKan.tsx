@@ -447,7 +447,8 @@ const TileButton = styled.button<{
   background-color: ${props => {
     if (props.$isMatched) return 'transparent';
     if (props.$isInvalid) return 'rgba(239, 68, 68, 0.9)';
-    if (props.$isSelected || props.$isHint) return 'rgba(72, 187, 120, 0.2)';
+    if (props.$isSelected) return 'rgba(72, 187, 120, 0.9)';
+    if (props.$isHint) return 'rgba(72, 187, 120, 0.2)';
     return 'rgba(255, 255, 255, 0.9)';
   }};
   box-shadow: ${props => {
@@ -459,7 +460,8 @@ const TileButton = styled.button<{
   }};
   border: ${props => {
     if (props.$isMatched) return 'none';
-    if (props.$isSelected) return '2px solid rgba(72, 187, 120, 0.8)';
+    if (props.$isInvalid) return '2px solid rgba(239, 68, 68, 0.8)';
+    if (props.$isSelected) return '2px solid rgba(72, 187, 120, 0.9)';
     if (props.$isHint) return '2px solid rgba(72, 187, 120, 0.4)';
     return '1px solid rgba(0, 0, 0, 0.1)';
   }};
@@ -472,7 +474,8 @@ const TileButton = styled.button<{
     box-shadow: ${props => {
       if (props.$isMatched) return 'none';
       if (props.$isInvalid) return '0 6px 8px rgba(239, 68, 68, 0.3)';
-      if (props.$isSelected || props.$isHint) return '0 6px 8px rgba(72, 187, 120, 0.3)';
+      if (props.$isSelected) return '0 6px 8px rgba(72, 187, 120, 0.4)';
+      if (props.$isHint) return '0 6px 8px rgba(72, 187, 120, 0.3)';
       return '0 6px 8px rgba(0, 0, 0, 0.2)';
     }};
   }
