@@ -8,7 +8,7 @@ class AudioManager {
   private soundsGain: GainNode | null = null;
   private isMuted: boolean = false;
   private isInitialized: boolean = false;
-  private loadPromises: Promise<void>[] = [];
+  private loadPromises: Promise<boolean>[] = [];
   private bgMusicVolume: number = 0.5;
   private soundEffectsVolume: number = 0.5;
 
@@ -21,17 +21,27 @@ class AudioManager {
     this.sounds = {} as Record<string, HTMLAudioElement>;
     
     // 预加载音效
-    this.loadSoundEffect('select', 'select.mp3');
     this.loadSoundEffect('match', 'match.mp3');
+    this.loadSoundEffect('mismatch', 'mismatch.mp3');
     this.loadSoundEffect('levelComplete', 'level-complete.mp3');
     this.loadSoundEffect('gameOver', 'game-over.mp3');
 
     this.loadPromises.push(
-      new Promise((resolve, reject) => {
-        this.bgMusic.addEventListener('canplaythrough', () => resolve(), { once: true });
+      new Promise<boolean>((resolve, reject) => {
+        this.bgMusic.addEventListener('canplaythrough', () => {
+          console.log('Background music loaded successfully');
+          resolve(true);
+        }, { once: true });
         this.bgMusic.addEventListener('error', (e) => {
-          console.error('Background music loading error:', this.bgMusic.error);
-          reject(this.bgMusic.error);
+          const error = this.bgMusic.error;
+          console.error('Background music loading error:', {
+            code: error?.code,
+            message: error?.message,
+            src: this.bgMusic.src,
+            networkState: this.bgMusic.networkState,
+            readyState: this.bgMusic.readyState
+          });
+          reject(error);
         }, { once: true });
       })
     );
@@ -41,23 +51,6 @@ class AudioManager {
       sound.load();
     });
     this.bgMusic.load();
-  }
-
-  private loadSoundEffect(name: string, filename: string) {
-    const audio = new Audio();
-    audio.volume = this.soundEffectsVolume;
-    audio.src = `${import.meta.env.BASE_URL}sounds/${filename}`;
-    this.sounds[name] = audio;
-    
-    this.loadPromises.push(
-      new Promise((resolve, reject) => {
-        audio.addEventListener('canplaythrough', () => resolve(), { once: true });
-        audio.addEventListener('error', (e) => {
-          console.error(`Sound ${name} loading error:`, audio.error);
-          reject(audio.error);
-        }, { once: true });
-      })
-    );
   }
 
   public static getInstance(): AudioManager {
@@ -72,7 +65,13 @@ class AudioManager {
 
     try {
       // 等待所有音频文件加载完成
-      await Promise.all(this.loadPromises);
+      const loadResults = await Promise.all(this.loadPromises);
+      
+      // 检查加载结果
+      const failedSounds = loadResults.filter(result => !result).length;
+      if (failedSounds > 0) {
+        console.warn(`${failedSounds} sound(s) failed to load`);
+      }
 
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       
@@ -80,30 +79,36 @@ class AudioManager {
       this.bgMusicGain = this.audioContext.createGain();
       this.soundsGain = this.audioContext.createGain();
       
-      // 连接背景音乐
-      if (this.audioContext && this.bgMusicGain) {
-        this.bgMusicSource = this.audioContext.createMediaElementSource(this.bgMusic);
-        this.bgMusicSource.connect(this.bgMusicGain);
-        this.bgMusicGain.connect(this.audioContext.destination);
-        
-        // 设置初始音量
-        this.bgMusicGain.gain.value = 0.5;
-        this.soundsGain.gain.value = 0.5;
+      try {
+        // 连接背景音乐
+        if (this.audioContext && this.bgMusicGain) {
+          this.bgMusicSource = this.audioContext.createMediaElementSource(this.bgMusic);
+          this.bgMusicSource.connect(this.bgMusicGain);
+          this.bgMusicGain.connect(this.audioContext.destination);
+          
+          // 设置初始音量
+          this.bgMusicGain.gain.value = this.bgMusicVolume;
+          this.soundsGain.gain.value = this.soundEffectsVolume;
 
-        // 连接音效
-        Object.values(this.sounds).forEach(sound => {
-          if (this.audioContext && this.soundsGain) {
-            const source = this.audioContext.createMediaElementSource(sound);
-            source.connect(this.soundsGain);
-          }
-        });
-        this.soundsGain.connect(this.audioContext.destination);
-
-        this.isInitialized = true;
+          // 连接音效
+          Object.values(this.sounds).forEach(sound => {
+            if (this.audioContext && this.soundsGain && sound.readyState >= 2) {
+              const source = this.audioContext.createMediaElementSource(sound);
+              source.connect(this.soundsGain);
+            }
+          });
+          this.soundsGain.connect(this.audioContext.destination);
+        }
+      } catch (error) {
+        console.warn('Failed to connect audio nodes:', error);
+        // 即使连接失败，也标记为已初始化，这样音频仍然可以播放
       }
+
+      this.isInitialized = true;
     } catch (error) {
       console.error('Failed to initialize audio context:', error);
-      throw error;
+      // 不抛出错误，让游戏继续运行
+      this.isInitialized = true; // 防止重复尝试初始化
     }
   }
 
@@ -117,12 +122,11 @@ class AudioManager {
         await this.audioContext.resume();
       }
 
-      if (!this.isMuted && this.bgMusic.readyState >= 2) {
+      if (!this.isMuted) {
         await this.bgMusic.play();
       }
     } catch (error) {
-      console.error('Background music play failed:', error);
-      throw error;
+      console.error('Background music start failed:', error);
     }
   }
 
@@ -168,7 +172,7 @@ class AudioManager {
       }
       await this.bgMusic.play();
     } catch (error) {
-      console.log('Resume background music failed:', error);
+      console.warn('Resume background music failed:', error);
     }
   }
 
@@ -193,6 +197,51 @@ class AudioManager {
     if (this.soundsGain) {
       this.soundsGain.gain.value = Math.max(0, Math.min(1, volume));
     }
+  }
+
+  private loadSoundEffect(name: string, filename: string) {
+    const audio = new Audio();
+    audio.volume = this.soundEffectsVolume;
+    const src = `${import.meta.env.BASE_URL}sounds/${filename}`;
+    
+    // 添加事件监听器
+    audio.addEventListener('loadstart', () => {
+      console.log(`Sound ${name} started loading from ${src}`);
+    }, { once: true });
+    
+    audio.addEventListener('loadedmetadata', () => {
+      console.log(`Sound ${name} metadata loaded:`, {
+        duration: audio.duration
+      });
+    }, { once: true });
+    
+    const loadPromise = new Promise<boolean>((resolve, reject) => {
+      audio.addEventListener('canplaythrough', () => {
+        console.log(`Sound ${name} loaded successfully from ${src}`, {
+          duration: audio.duration,
+          networkState: audio.networkState,
+          readyState: audio.readyState
+        });
+        resolve(true);
+      }, { once: true });
+      
+      audio.addEventListener('error', (e) => {
+        const error = audio.error;
+        console.error(`Sound ${name} loading error:`, {
+          code: error?.code,
+          message: error?.message,
+          src: src,
+          networkState: audio.networkState,
+          readyState: audio.readyState
+        });
+        reject(error);
+      }, { once: true });
+    });
+
+    // 设置音频源并开始加载
+    audio.src = src;
+    this.sounds[name] = audio;
+    this.loadPromises.push(loadPromise);
   }
 }
 

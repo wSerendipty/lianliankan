@@ -1,76 +1,223 @@
-import { Level } from '../types';
+import { Level, SpecialRule } from '../types';
 
-export const levels: Level[] = [
-  {
-    id: 1,
-    width: 4,
-    height: 4,
-    timeLimit: 120,
-    baseScore: 100,
-    tileTypes: 4,
-    name: '关卡一'
-  },
-  {
-    id: 2,
-    width: 6,
-    height: 4,
-    timeLimit: 150,
-    baseScore: 150,
-    tileTypes: 6,
-    name: '关卡二'
-  },
-  {
-    id: 3,
-    width: 6,
+// 定义不同的游戏模式
+export enum GameMode {
+  CLASSIC = 'classic',      // 经典模式
+  TIME_RUSH = 'timeRush',   // 限时挑战
+  MOVING = 'moving',        // 移动方块
+  ROTATING = 'rotating',    // 旋转方块
+  FADING = 'fading',       // 渐隐方块
+  FROZEN = 'frozen',       // 冰冻方块
+}
+
+// 定义不同的形状模板
+const shapes = {
+  // 基础形状
+  rectangle: (width: number, height: number): boolean[][] =>
+    Array(height).fill(0).map(() => Array(width).fill(true)),
+
+  // 心形
+  heart: [
+    [false, true, true, false, true, true, false],
+    [true, true, true, true, true, true, true],
+    [true, true, true, true, true, true, true],
+    [false, true, true, true, true, true, false],
+    [false, false, true, true, true, false, false],
+    [false, false, false, true, false, false, false],
+  ],
+
+  // 星形
+  star: [
+    [false, false, false, true, false, false, false],
+    [false, false, true, true, true, false, false],
+    [true, true, true, true, true, true, true],
+    [false, true, true, true, true, true, false],
+    [false, false, true, true, true, false, false],
+    [false, true, false, false, false, true, false],
+  ],
+
+  // 蝴蝶形
+  butterfly: [
+    [true, false, true, true, true, false, true],
+    [true, true, true, true, true, true, true],
+    [false, true, true, true, true, true, false],
+    [false, false, true, true, true, false, false],
+    [false, true, true, false, true, true, false],
+    [true, true, false, false, false, true, true],
+  ],
+
+  // 城堡形
+  castle: [
+    [true, false, true, false, true, false, true],
+    [true, true, true, true, true, true, true],
+    [true, true, true, true, true, true, true],
+    [true, true, true, true, true, true, true],
+    [true, true, true, true, true, true, true],
+    [true, false, true, true, true, false, true],
+  ],
+
+  // 钻石形
+  diamond: [
+    [false, false, false, true, false, false, false],
+    [false, false, true, true, true, false, false],
+    [false, true, true, true, true, true, false],
+    [true, true, true, true, true, true, true],
+    [false, true, true, true, true, true, false],
+    [false, false, true, true, true, false, false],
+    [false, false, false, true, false, false, false],
+  ],
+};
+
+// 生成99个关卡
+export const levels: Level[] = Array(99).fill(null).map((_, index) => {
+  const level = index + 1;
+  const difficulty = Math.floor(level / 10) + 1; // 每10关增加一个难度等级
+
+  // 基础配置
+  let config: Level = {
+    id: level,
+    name: `关卡 ${level}`,
+    width: 7,
     height: 6,
-    timeLimit: 180,
-    baseScore: 200,
-    tileTypes: 8,
-    name: '关卡三'
-  },
-  {
-    id: 4,
-    width: 8,
-    height: 6,
-    timeLimit: 240,
-    baseScore: 250,
-    tileTypes: 10,
-    name: '关卡四'
-  },
-  {
-    id: 5,
-    width: 8,
-    height: 8,
-    timeLimit: 300,
-    baseScore: 300,
-    tileTypes: 12,
-    name: '关卡五'
-  },
-  {
-    id: 6,
-    width: 10,
-    height: 8,
-    timeLimit: 360,
-    baseScore: 350,
-    tileTypes: 13,
-    name: '关卡六'
-  },
-  {
-    id: 7,
-    width: 10,
-    height: 10,
-    timeLimit: 420,
-    baseScore: 400,
-    tileTypes: 14,
-    name: '关卡七'
-  },
-  {
-    id: 8,
-    width: 12,
-    height: 10,
-    timeLimit: 480,
-    baseScore: 450,
-    tileTypes: 15,
-    name: '关卡八'
+    timeLimit: 300 - difficulty * 10, // 随难度减少时间
+    baseScore: 1000 + difficulty * 200, // 随难度增加基础分数
+    tileTypes: Math.min(8 + Math.floor(difficulty / 2), 15), // 随难度增加方块类型，最多15种
+    mode: GameMode.CLASSIC,
+    specialRules: [],
+  };
+
+  // 根据关卡设置不同的游戏模式和特殊规则
+  if (level % 5 === 0) { // 每5关使用特殊形状
+    const shapeKeys = Object.keys(shapes);
+    const shapeIndex = Math.floor(level / 5) % shapeKeys.length;
+    const shapeName = shapeKeys[shapeIndex];
+    config.shape = shapes[shapeName === 'rectangle' ? 'rectangle' : shapeName as keyof typeof shapes];
   }
-]; 
+
+  // 设置游戏模式 - 新的模式分配逻辑
+  const modeDistribution = [
+    GameMode.CLASSIC,    // 1-15关：经典模式为主
+    GameMode.TIME_RUSH,  // 16-30关：开始出现限时冲刺
+    GameMode.MOVING,     // 31-45关：加入移动方块
+    GameMode.ROTATING,   // 46-60关：加入旋转玩法
+    GameMode.FADING,     // 61-75关：加入渐隐玩法
+    GameMode.FROZEN      // 76-99关：加入冰冻玩法
+  ];
+
+  // 确定当前关卡可用的模式池
+  const availableModes = modeDistribution.slice(0, Math.floor((level - 1) / 15) + 1);
+  
+  // 根据关卡号选择模式
+  if (level <= 15) {
+    // 前15关保持经典模式
+    config.mode = GameMode.CLASSIC;
+  } else {
+    // 之后的关卡从可用模式池中选择
+    // 使用关卡号作为种子来确保特定关卡总是获得相同的模式
+    const modeIndex = Math.floor(Math.pow(level, 2.5)) % availableModes.length;
+    config.mode = availableModes[modeIndex];
+  }
+
+  // 添加特殊规则
+  if (level > 20) {
+    // 根据模式添加对应的特殊规则
+    switch (config.mode) {
+      case GameMode.TIME_RUSH:
+        config.specialRules.push('timerDecrease');
+        break;
+      case GameMode.MOVING:
+        config.specialRules.push('movingTiles');
+        break;
+      case GameMode.ROTATING:
+        config.specialRules.push('rotatingBoard');
+        break;
+      case GameMode.FADING:
+        config.specialRules.push('fadingTiles');
+        break;
+      case GameMode.FROZEN:
+        config.specialRules.push('frozenTiles');
+        break;
+    }
+
+    // 额外的规则组合
+    if (level % 10 === 0) { // 每10关添加额外规则
+      const extraRules: SpecialRule[] = ['timerDecrease', 'movingTiles', 'rotatingBoard', 'fadingTiles', 'frozenTiles'];
+      const currentRules = new Set(config.specialRules);
+      
+      // 随机选择一个未使用的规则添加
+      const availableRules = extraRules.filter(rule => !currentRules.has(rule));
+      if (availableRules.length > 0) {
+        const randomRule = availableRules[Math.floor(level % availableRules.length)];
+        config.specialRules.push(randomRule);
+      }
+    }
+  }
+
+  // 调整难度相关参数
+  if (difficulty > 5) {
+    config.width = 8;
+    config.height = 7;
+  }
+  if (difficulty > 8) {
+    config.width = 9;
+    config.height = 8;
+  }
+
+  // 根据模式调整时间和分数
+  switch (config.mode) {
+    case GameMode.TIME_RUSH:
+      config.timeLimit = Math.max(120, config.timeLimit - 60); // 减少时间限制
+      config.baseScore *= 1.5; // 增加基础分数
+      break;
+    case GameMode.MOVING:
+      config.timeLimit += 30; // 增加时间补偿移动难度
+      config.baseScore *= 1.3;
+      break;
+    case GameMode.ROTATING:
+      config.timeLimit += 45; // 增加时间补偿旋转难度
+      config.baseScore *= 1.4;
+      break;
+    case GameMode.FADING:
+      config.timeLimit += 20; // 增加时间补偿渐隐难度
+      config.baseScore *= 1.2;
+      break;
+    case GameMode.FROZEN:
+      config.timeLimit += 40; // 增加时间补偿冰冻难度
+      config.baseScore *= 1.35;
+      break;
+  }
+
+  // 设置关卡名称
+  config.name = getModeName(config.mode, level);
+
+  return config;
+});
+
+// 获取模式名称
+function getModeName(mode: GameMode, level: number): string {
+  const baseNames = {
+    [GameMode.CLASSIC]: "经典挑战",
+    [GameMode.TIME_RUSH]: "限时冲刺",
+    [GameMode.MOVING]: "移动迷踪",
+    [GameMode.ROTATING]: "旋转乾坤",
+    [GameMode.FADING]: "渐隐迷局",
+    [GameMode.FROZEN]: "冰封绝阵"
+  };
+
+  const specialShapes = {
+    heart: "心形",
+    star: "星形",
+    butterfly: "蝴蝶",
+    castle: "城堡",
+    diamond: "钻石"
+  };
+
+  let name = baseNames[mode];
+  if (level % 5 === 0) {
+    const shapeIndex = Math.floor(level / 5) % Object.keys(specialShapes).length;
+    const shapeName = Object.values(specialShapes)[shapeIndex];
+    name += ` - ${shapeName}`;
+  }
+
+  return name;
+} 

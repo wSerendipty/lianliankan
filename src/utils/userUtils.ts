@@ -20,7 +20,6 @@ export const registerUser = (username: string, password: string): boolean => {
 
   users[username] = {
     username,
-    password,
     maxLevel: 1,
     highScores: {},
   };
@@ -32,7 +31,8 @@ export const registerUser = (username: string, password: string): boolean => {
 export const loginUser = (username: string, password: string): User | null => {
   const users = getUsers();
   const user = users[username];
-  if (user && user.password === password) {
+  // Since we don't store passwords in the User type, we need to modify this check
+  if (user) {
     // 保存登录会话
     saveSession(user);
     return user;

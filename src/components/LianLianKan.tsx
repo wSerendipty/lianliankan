@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled, { keyframes, css } from 'styled-components';
-import { Tile, GameState, User } from '../types';
-import { levels } from '../config/levels';
+import { Tile, GameState, User, Level, SpecialRule } from '../types';
+import { levels, GameMode } from '../config/levels';
 import AudioManager from '../utils/AudioManager';
 import { generateBoard, canConnect } from '../utils/gameUtils';
 import { updateUserProgress, getCurrentSession, logout, getUsers } from '../utils/userUtils';
 import Auth from './Auth';
+import LevelSelect from './LevelSelect';
 
 const GameContainer = styled.div<{ $isAuth?: boolean }>`
   display: flex;
@@ -14,6 +15,9 @@ const GameContainer = styled.div<{ $isAuth?: boolean }>`
   color: white;
   position: relative;
   padding: 20px;
+  box-sizing: border-box;
+  max-width: 100vw;
+  overflow-x: hidden;
 
   @media (max-width: 768px) {
     flex-direction: column;
@@ -40,9 +44,12 @@ const UserCard = styled.div`
   background: rgba(30, 41, 59, 0.7);
   border-radius: 12px;
   padding: 15px;
-  margin-bottom: 0;
+  margin-bottom: 20px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 `;
 
 const UserInfoItem = styled.div`
@@ -66,20 +73,60 @@ const UserInfoItem = styled.div`
   }
 `;
 
-const LogoutButton = styled.button`
+const ButtonContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 5px;
+`;
+
+const LevelSelectButton = styled.button`
   width: 100%;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #3182ce;
+  border: none;
   color: white;
   padding: 12px;
   border-radius: 8px;
   cursor: pointer;
-  margin-top: 12px;
   transition: all 0.3s ease;
   font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  &:hover {
+    background: #2c5282;
+    transform: translateY(-2px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
+
+const LogoutButton = styled.button`
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 
   &:hover {
     background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+  }
+
+  &:active {
+    transform: translateY(0);
   }
 `;
 
@@ -119,9 +166,13 @@ const MainContent = styled.div`
   align-items: center;
   justify-content: center;
   min-height: 0;
+  width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
 
   @media (max-width: 768px) {
     margin: 10px 0;
+    padding: 5px;
   }
 `;
 
@@ -143,7 +194,7 @@ const GameTitle = styled.h1`
   }
 `;
 
-const GameBoard = styled.div<{ width: number; height: number }>`
+const GameBoard = styled.div<{ width: number; height: number; $rotation?: number }>`
   display: grid;
   grid-template-columns: repeat(${props => props.width}, 60px);
   grid-template-rows: repeat(${props => props.height}, 60px);
@@ -154,14 +205,29 @@ const GameBoard = styled.div<{ width: number; height: number }>`
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  transform: ${props => props.$rotation ? `rotate(${props.$rotation}deg)` : 'none'};
+  transition: transform 0.5s ease;
 
   @media (max-width: 768px) {
-    grid-template-columns: repeat(${props => props.width}, minmax(40px, 1fr));
-    grid-template-rows: repeat(${props => props.height}, minmax(40px, 1fr));
-    gap: 3px;
-    padding: 10px;
-    width: 95vw;
-    max-width: 400px;
+    grid-template-columns: repeat(${props => props.width}, minmax(30px, 1fr));
+    grid-template-rows: repeat(${props => props.height}, minmax(30px, 1fr));
+    gap: 2px;
+    padding: 8px;
+    width: calc(100vw - 20px);
+    max-width: 100vw;
+    overflow-x: auto;
+    justify-content: center;
+    margin: 0 auto;
+  }
+
+  @media (max-width: 480px) {
+    grid-template-columns: repeat(${props => props.width}, minmax(25px, 1fr));
+    grid-template-rows: repeat(${props => props.height}, minmax(25px, 1fr));
+    gap: 1px;
+    padding: 4px;
   }
 `;
 
@@ -495,52 +561,79 @@ const TileButton = styled.button<{
   $isMatched: boolean;
   $isInvalid?: boolean;
   $isHint?: boolean;
+  $isDisabled?: boolean;
+  $isFrozen?: boolean;
+  $isFading?: boolean;
+  $rotation?: number;
 }>`
   width: 100%;
   height: 100%;
   border: none;
   border-radius: 8px;
   font-size: 28px;
-  cursor: pointer;
+  cursor: ${props => (props.$isDisabled || props.$isFrozen) ? 'not-allowed' : 'pointer'};
   transition: all 0.3s ease;
   background-color: ${props => {
+    if (props.$isDisabled) return 'transparent';
     if (props.$isMatched) return 'transparent';
     if (props.$isInvalid) return 'rgba(239, 68, 68, 0.9)';
+    if (props.$isFrozen) return 'rgba(147, 197, 253, 0.9)';
     if (props.$isSelected) return 'rgba(72, 187, 120, 0.9)';
     if (props.$isHint) return 'rgba(72, 187, 120, 0.2)';
     return 'rgba(255, 255, 255, 0.9)';
   }};
+  opacity: ${props => {
+    if (props.$isDisabled || props.$isMatched) return 0;
+    if (props.$isFading) return 0.5;
+    return 1;
+  }};
+  transform: ${props => {
+    let transform = props.$isSelected || props.$isInvalid ? 'scale(0.95)' : 'scale(1)';
+    if (props.$rotation) {
+      transform += ` rotate(${props.$rotation}deg)`;
+    }
+    return transform;
+  }};
+  pointer-events: ${props => (props.$isDisabled || props.$isMatched || props.$isFrozen) ? 'none' : 'auto'};
   box-shadow: ${props => {
-    if (props.$isMatched) return 'none';
+    if (props.$isDisabled || props.$isMatched) return 'none';
     if (props.$isInvalid) return '0 4px 6px rgba(239, 68, 68, 0.2)';
     if (props.$isSelected) return '0 4px 6px rgba(72, 187, 120, 0.3)';
     if (props.$isHint) return '0 4px 6px rgba(72, 187, 120, 0.2)';
     return '0 4px 6px rgba(0, 0, 0, 0.1)';
   }};
   border: ${props => {
-    if (props.$isMatched) return 'none';
+    if (props.$isDisabled || props.$isMatched) return 'none';
     if (props.$isInvalid) return '2px solid rgba(239, 68, 68, 0.8)';
     if (props.$isSelected) return '2px solid rgba(72, 187, 120, 0.9)';
     if (props.$isHint) return '2px solid rgba(72, 187, 120, 0.4)';
     return '1px solid rgba(0, 0, 0, 0.1)';
   }};
-  opacity: ${props => props.$isMatched ? 0 : 1};
-  transform: ${props => (props.$isSelected || props.$isInvalid) ? 'scale(0.95)' : 'scale(1)'};
-  animation: ${props => props.$isHint ? css`${glowPulse} 1.8s ease-in-out infinite` : 'none'};
+  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   
   @media (max-width: 768px) {
     font-size: 20px;
-    border-radius: 6px;
-    
-    &:active {
-      transform: scale(0.95);
-    }
+    border-radius: 4px;
+  }
+
+  @media (max-width: 480px) {
+    font-size: 16px;
+    border-radius: 3px;
   }
 
   &:hover {
-    transform: ${props => props.$isMatched ? 'none' : (props.$isSelected || props.$isInvalid) ? 'scale(0.95)' : 'scale(1.05)'};
+    transform: ${props => {
+      if (props.$isDisabled || props.$isMatched) return 'none';
+      return (props.$isSelected || props.$isInvalid) ? 'scale(0.95)' : 'scale(1.05)';
+    }};
     box-shadow: ${props => {
-      if (props.$isMatched) return 'none';
+      if (props.$isDisabled || props.$isMatched) return 'none';
       if (props.$isInvalid) return '0 6px 8px rgba(239, 68, 68, 0.3)';
       if (props.$isSelected) return '0 6px 8px rgba(72, 187, 120, 0.4)';
       if (props.$isHint) return '0 6px 8px rgba(72, 187, 120, 0.3)';
@@ -549,7 +642,7 @@ const TileButton = styled.button<{
   }
 
   &:active {
-    transform: scale(0.95);
+    transform: ${props => props.$isDisabled ? 'none' : 'scale(0.95)'};
   }
 `;
 
@@ -604,6 +697,123 @@ const RulesSection = styled.div`
   z-index: 100;
 `;
 
+// 在组件内部添加一个辅助函数来处理形状
+const getBoardLayout = (level: Level): boolean[][] => {
+  const defaultLayout = Array(level.height).fill(0).map(() => Array(level.width).fill(true));
+  
+  if (!level.shape) {
+    return defaultLayout;
+  }
+
+  if (typeof level.shape === 'function') {
+    try {
+      return level.shape(level.width, level.height);
+    } catch (error) {
+      console.error('Error generating board shape:', error);
+      return defaultLayout;
+    }
+  }
+
+  return level.shape;
+};
+
+const getRules = (level: Level): { title: string; rules: string[] } => {
+  const baseRules = [
+    "点击两个相同的图案进行配对",
+    "配对的图案必须能够通过不超过两个转角的路径连接",
+    "连接路径上不能有其他未消除的图案阻挡",
+    "成功配对后图案会消失",
+    "消除所有图案即可通关",
+    "5秒未操作会自动提示可配对的图案",
+  ];
+
+  const modeRules: { [key in GameMode]: string[] } = {
+    [GameMode.CLASSIC]: [
+      "经典模式 - 基础连连看玩法",
+      "剩余时间越多，获得的分数越高",
+    ],
+    [GameMode.TIME_RUSH]: [
+      "⚡ 限时冲刺模式",
+      "时间流失速度加快",
+      "成功配对可以获得更多分数",
+      "注意把握时间，争分夺秒！",
+    ],
+    [GameMode.MOVING]: [
+      "🔄 移动方块模式",
+      "方块会随机改变位置",
+      "需要在方块移动时抓住时机配对",
+      "成功配对获得额外时间奖励",
+    ],
+    [GameMode.ROTATING]: [
+      "🌀 旋转乾坤模式",
+      "游戏板会定期旋转",
+      "方块位置会随着旋转改变",
+      "考验空间思维能力",
+    ],
+    [GameMode.FADING]: [
+      "👻 渐隐迷局模式",
+      "方块会随机变透明",
+      "需要记住方块位置和类型",
+      "训练记忆力和观察力",
+    ],
+    [GameMode.FROZEN]: [
+      "❄️ 冰封绝阵模式",
+      "部分方块会被冰冻",
+      "冰冻方块无法选择",
+      "等待冰冻解除后再操作",
+    ],
+  };
+
+  const specialRuleDescriptions: { [key in SpecialRule]: string } = {
+    timerDecrease: "⏰ 时间流失加速",
+    movingTiles: "🔄 方块位置随机移动",
+    rotatingBoard: "🌀 游戏板定期旋转",
+    fadingTiles: "👻 方块随机渐隐",
+    frozenTiles: "❄️ 方块随机冰冻",
+  };
+
+  const rules = [...baseRules];
+  
+  // 添加模式特定规则
+  rules.push(...modeRules[level.mode]);
+
+  // 添加额外特殊规则说明
+  if (level.specialRules.length > 0) {
+    rules.push("🌟 特殊规则：");
+    level.specialRules.forEach(rule => {
+      if (rule !== level.mode.toLowerCase()) { // 避免重复显示与模式相同的规则
+        rules.push(specialRuleDescriptions[rule]);
+      }
+    });
+  }
+
+  // 根据关卡形状添加提示
+  if (level.shape && typeof level.shape !== 'function') {
+    rules.push("💫 特殊形状关卡，注意观察可用区域！");
+  }
+
+  let title = "游戏规则";
+  switch (level.mode) {
+    case GameMode.TIME_RUSH:
+      title = "⚡ 限时冲刺规则";
+      break;
+    case GameMode.MOVING:
+      title = "🔄 移动迷踪规则";
+      break;
+    case GameMode.ROTATING:
+      title = "🌀 旋转乾坤规则";
+      break;
+    case GameMode.FADING:
+      title = "👻 渐隐迷局规则";
+      break;
+    case GameMode.FROZEN:
+      title = "❄️ 冰封绝阵规则";
+      break;
+  }
+
+  return { title, rules };
+};
+
 const LianLianKan: React.FC = () => {
   const [board, setBoard] = useState<Tile[]>([]);
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null);
@@ -627,12 +837,16 @@ const LianLianKan: React.FC = () => {
   const [lastInteractionTime, setLastInteractionTime] = useState<number>(Date.now());
   const [hasScroll, setHasScroll] = useState(false);
   const gameContainerRef = useRef<HTMLDivElement>(null);
+  const [showLevelSelect, setShowLevelSelect] = useState(false);
+  const [boardRotation, setBoardRotation] = useState(0);
+  const [movingInterval, setMovingInterval] = useState<NodeJS.Timeout | null>(null);
 
   const audioManager = AudioManager.getInstance();
 
   const initializeLevel = useCallback((levelId: number) => {
     const level = levels[levelId - 1];
-    setBoard(generateBoard(level.width, level.height, level.tileTypes));
+    const boardLayout = getBoardLayout(level);
+    setBoard(generateBoard(level.width, level.height, level.tileTypes, boardLayout));
     setSelectedTile(null);
     setGameState(prev => ({
       ...prev,
@@ -784,120 +998,281 @@ const LianLianKan: React.FC = () => {
     return () => clearInterval(timer);
   }, [lastInteractionTime, findMatchingPair, gameState.isPaused, gameState.isGameOver]);
 
-  const handleTileClick = async (tile: Tile) => {
+  // 处理旋转效果
+  useEffect(() => {
+    const currentLevel = levels[gameState.currentLevel - 1];
+    let rotateInterval: NodeJS.Timeout | null = null;
+    
+    if (!gameState.isPaused && !gameState.isGameOver && currentLevel.specialRules.includes('rotatingBoard')) {
+      rotateInterval = setInterval(() => {
+        setBoardRotation(prev => (prev + 90) % 360);
+      }, 10000); // 每10秒旋转90度
+    }
+    
+    return () => {
+      if (rotateInterval) {
+        clearInterval(rotateInterval);
+      }
+    };
+  }, [gameState.currentLevel, gameState.isPaused, gameState.isGameOver]);
+
+  // 处理移动效果
+  useEffect(() => {
+    const currentLevel = levels[gameState.currentLevel - 1];
+    let moveInterval: NodeJS.Timeout | null = null;
+    
+    if (!gameState.isPaused && !gameState.isGameOver && currentLevel.specialRules.includes('movingTiles')) {
+      moveInterval = setInterval(() => {
+        setBoard(prev => {
+          const unmatchedTiles = prev.filter(t => !t.isMatched);
+          if (unmatchedTiles.length === 0) return prev;
+
+          return prev.map(tile => {
+            if (tile.isMatched) return tile;
+            
+            const shouldMove = Math.random() < 0.2; // 降低移动概率到20%
+            if (!shouldMove) return tile;
+            
+            const dx = Math.floor(Math.random() * 3) - 1;
+            const dy = Math.floor(Math.random() * 3) - 1;
+            
+            const newX = Math.max(0, Math.min(currentLevel.width - 1, tile.x + dx));
+            const newY = Math.max(0, Math.min(currentLevel.height - 1, tile.y + dy));
+            
+            return { ...tile, x: newX, y: newY, isMoving: true };
+          });
+        });
+      }, 3000); // 增加间隔到3秒
+    }
+    
+    return () => {
+      if (moveInterval) {
+        clearInterval(moveInterval);
+      }
+    };
+  }, [gameState.currentLevel, gameState.isPaused, gameState.isGameOver]);
+
+  // 处理时间减少效果
+  useEffect(() => {
+    const currentLevel = levels[gameState.currentLevel - 1];
+    let timerInterval: NodeJS.Timeout | null = null;
+    
+    if (!gameState.isPaused && !gameState.isGameOver && currentLevel.specialRules.includes('timerDecrease')) {
+      timerInterval = setInterval(() => {
+        setGameState(prev => ({
+          ...prev,
+          timeLeft: Math.max(0, prev.timeLeft - 1),
+        }));
+      }, 750); // 降低时间减少频率
+    }
+    
+    return () => {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    };
+  }, [gameState.currentLevel, gameState.isPaused, gameState.isGameOver]);
+
+  // 处理渐隐效果
+  useEffect(() => {
+    const currentLevel = levels[gameState.currentLevel - 1];
+    let fadeInterval: NodeJS.Timeout | null = null;
+    
+    if (!gameState.isPaused && !gameState.isGameOver && currentLevel.specialRules.includes('fadingTiles')) {
+      fadeInterval = setInterval(() => {
+        setBoard(prev => {
+          const unmatchedTiles = prev.filter(t => !t.isMatched);
+          if (unmatchedTiles.length === 0) return prev;
+
+          return prev.map(tile => ({
+            ...tile,
+            isFading: !tile.isMatched && Math.random() < 0.2, // 降低渐隐概率到20%
+          }));
+        });
+      }, 4000); // 增加间隔到4秒
+    }
+    
+    return () => {
+      if (fadeInterval) {
+        clearInterval(fadeInterval);
+      }
+    };
+  }, [gameState.currentLevel, gameState.isPaused, gameState.isGameOver]);
+
+  // 处理冰冻效果
+  useEffect(() => {
+    const currentLevel = levels[gameState.currentLevel - 1];
+    let freezeInterval: NodeJS.Timeout | null = null;
+    
+    if (!gameState.isPaused && !gameState.isGameOver && currentLevel.specialRules.includes('frozenTiles')) {
+      freezeInterval = setInterval(() => {
+        setBoard(prev => {
+          const unmatchedTiles = prev.filter(t => !t.isMatched);
+          if (unmatchedTiles.length === 0) return prev;
+
+          return prev.map(tile => ({
+            ...tile,
+            isFrozen: !tile.isMatched && Math.random() < 0.15, // 降低冰冻概率到15%
+          }));
+        });
+      }, 5000); // 增加间隔到5秒
+    }
+    
+    return () => {
+      if (freezeInterval) {
+        clearInterval(freezeInterval);
+      }
+    };
+  }, [gameState.currentLevel, gameState.isPaused, gameState.isGameOver]);
+
+  const handleTileClick = useCallback(async (tile: Tile) => {
     updateInteractionTime();
     
-    if (tile.isMatched || gameState.isPaused || gameState.isGameOver) return;
+    if (
+      tile.isMatched || 
+      gameState.isPaused || 
+      gameState.isGameOver || 
+      tile.isFrozen || 
+      tile.isFading
+    ) return;
 
-    const newBoard = [...board];
-    const clickedTile = newBoard.find(t => t.id === tile.id)!;
     const currentLevel = levels[gameState.currentLevel - 1];
 
-    setInvalidTile(null);
+    // 清除无效状态
+    if (invalidTile) {
+      setInvalidTile(null);
+    }
 
+    // 处理第一次点击
     if (selectedTile === null) {
-      clickedTile.isSelected = true;
-      setSelectedTile(clickedTile);
-      try {
-        await audioManager.playSound('select');
-      } catch (error) {
-        console.error('Failed to play select sound:', error);
-      }
-    } else if (selectedTile.id === clickedTile.id) {
-      clickedTile.isSelected = false;
+      setBoard(prev => prev.map(t => 
+        t.id === tile.id ? { ...t, isSelected: true } : t
+      ));
+      setSelectedTile(tile);
+      return;
+    }
+
+    // 处理点击相同的方块
+    if (selectedTile.id === tile.id) {
+      setBoard(prev => prev.map(t => 
+        t.id === tile.id ? { ...t, isSelected: false } : t
+      ));
       setSelectedTile(null);
-    } else {
-      if (selectedTile.type === clickedTile.type) {
-        const path = canConnect(selectedTile, clickedTile, newBoard, currentLevel.width, currentLevel.height);
-        if (path) {
-          clickedTile.isSelected = true;
-          selectedTile.isMatched = true;
-          clickedTile.isMatched = true;
-          selectedTile.isSelected = false;
-          clickedTile.isSelected = false;
-          setSelectedTile(null);
+      return;
+    }
 
-          try {
-            await audioManager.playSound('match');
-          } catch (error) {
-            console.error('Failed to play match sound:', error);
+    // 处理第二次点击
+    if (selectedTile.type === tile.type) {
+      const path = canConnect(selectedTile, tile, board, currentLevel.width, currentLevel.height);
+      if (path) {
+        // 更新方块状态
+        setBoard(prev => prev.map(t => {
+          if (t.id === selectedTile.id || t.id === tile.id) {
+            return { ...t, isMatched: true, isSelected: false };
           }
-          
-          const timeBonus = Math.floor(gameState.timeLeft / 10);
-          const points = currentLevel.baseScore + timeBonus;
-          
-          const newScore = gameState.score + points;
-          setGameState(prev => ({
-            ...prev,
-            score: newScore,
-          }));
+          return t;
+        }));
+        setSelectedTile(null);
 
-          if (user) {
-            updateUserProgress(user.username, gameState.currentLevel, newScore);
-          }
+        // 播放匹配成功音效
+        audioManager.playSound('match').catch(console.error);
+        
+        // 更新分数
+        const timeBonus = Math.floor(gameState.timeLeft / 10);
+        const points = currentLevel.baseScore + timeBonus;
+        const newScore = gameState.score + points;
+        
+        setGameState(prev => ({
+          ...prev,
+          score: newScore,
+        }));
 
-          if (newBoard.every(t => t.isMatched)) {
-            try {
-              await audioManager.playSound('levelComplete');
-            } catch (error) {
-              console.error('Failed to play level complete sound:', error);
-            }
-            if (gameState.currentLevel < levels.length) {
-              setTimeout(() => {
-                if (user) {
-                  updateUserProgress(user.username, gameState.currentLevel + 1, newScore);
-                }
-                setGameState(prev => ({
-                  ...prev,
-                  currentLevel: prev.currentLevel + 1,
-                  highScores: {
-                    ...prev.highScores,
-                    [prev.currentLevel]: Math.max(prev.score, prev.highScores[prev.currentLevel] || 0),
-                  },
-                }));
-              }, 1000);
-            } else {
-              try {
-                await audioManager.playSound('gameOver');
-              } catch (error) {
-                console.error('Failed to play game over sound:', error);
+        // 更新用户进度
+        if (user) {
+          updateUserProgress(user.username, gameState.currentLevel, newScore);
+        }
+
+        // 检查是否完成关卡
+        const isLevelComplete = board.every(t => 
+          (t.id === selectedTile.id || t.id === tile.id) ? true : t.isMatched
+        );
+
+        if (isLevelComplete) {
+          audioManager.playSound('levelComplete').catch(console.error);
+          
+          if (gameState.currentLevel < levels.length) {
+            // 延迟进入下一关
+            setTimeout(() => {
+              if (user) {
+                updateUserProgress(user.username, gameState.currentLevel + 1, newScore);
               }
               setGameState(prev => ({
                 ...prev,
-                isGameOver: true,
+                currentLevel: prev.currentLevel + 1,
                 highScores: {
                   ...prev.highScores,
                   [prev.currentLevel]: Math.max(prev.score, prev.highScores[prev.currentLevel] || 0),
                 },
               }));
-            }
+            }, 1000);
+          } else {
+            // 完成所有关卡
+            audioManager.playSound('gameOver').catch(console.error);
+            setGameState(prev => ({
+              ...prev,
+              isGameOver: true,
+              highScores: {
+                ...prev.highScores,
+                [prev.currentLevel]: Math.max(prev.score, prev.highScores[prev.currentLevel] || 0),
+              },
+            }));
           }
-        } else {
-          setInvalidTile(clickedTile);
-          setTimeout(() => {
-            setInvalidTile(null);
-            newBoard.forEach(t => t.isSelected = false);
-            setSelectedTile(null);
-            setBoard([...newBoard]);
-          }, 500);
         }
       } else {
-        setInvalidTile(clickedTile);
+        // 无法连接的情况
+        setInvalidTile(tile);
+        // 播放匹配失败音效
+        audioManager.playSound('mismatch').catch(console.error);
         setTimeout(() => {
-          setInvalidTile(null);
-          newBoard.forEach(t => t.isSelected = false);
+          setBoard(prev => prev.map(t => ({ ...t, isSelected: false })));
           setSelectedTile(null);
-          setBoard([...newBoard]);
+          setInvalidTile(null);
         }, 500);
       }
+    } else {
+      // 类型不匹配的情况
+      setInvalidTile(tile);
+      // 播放匹配失败音效
+      audioManager.playSound('mismatch').catch(console.error);
+      setTimeout(() => {
+        setBoard(prev => prev.map(t => ({ ...t, isSelected: false })));
+        setSelectedTile(null);
+        setInvalidTile(null);
+      }, 500);
     }
-
-    setBoard(newBoard);
-  };
+  }, [board, selectedTile, invalidTile, gameState, user, audioManager, updateInteractionTime]);
 
   const getEmoji = (type: number) => {
-    const emojis = ['🌸', '🌺', '🌻', '🌹', '🌷', '🍀', '🌿', '🌴', '🌼', '🍁', '🍂', '🍃', '🌾', '🌵', '🌲'];
-    return emojis[type - 1];
+    const emojiCategories = [
+      // 植物类
+      ['🌸', '🌺', '🌻', '🌹', '🌷', '🍀', '🌿', '🌴', '🌼', '🍁', '🌵', '🌾', '🌳', '🌲', '🎋'],
+      // 水果类
+      ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍒', '🥝', '🍍', '🥭', '🍑', '🍈'],
+      // 动物类
+      ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐙'],
+      // 食物类
+      ['🍕', '🍔', '🍟', '🌭', '🍿', '🧂', '🥨', '🥯', '🥖', '🥐', '🍞', '🥪', '🌮', '🌯', '🫔'],
+      // 甜点类
+      ['🍦', '🍧', '🍨', '🍩', '🍪', '🎂', '🧁', '🥧', '🍰', '🍫', '🍬', '🍭', '🍮', '🍯', '🍡'],
+      // 饮品类
+      ['☕️', '🫖', '🍵', '🧃', '🥤', '🧋', '🍶', '🍺', '🍷', '🥂', '🥃', '🍸', '🍹', '🧉', '🥛'],
+    ];
+
+    const currentLevel = levels[gameState.currentLevel - 1];
+    // 根据关卡选择emoji类别
+    const categoryIndex = Math.floor((currentLevel.id - 1) / 5) % emojiCategories.length;
+    const category = emojiCategories[categoryIndex];
+    return category[(type - 1) % category.length];
   };
 
   const formatTime = (seconds: number) => {
@@ -907,6 +1282,21 @@ const LianLianKan: React.FC = () => {
   };
 
   const currentLevel = levels[gameState.currentLevel - 1];
+  const { title: rulesTitle, rules: currentRules } = getRules(currentLevel);
+  const boardLayout = getBoardLayout(currentLevel);
+
+  // 创建一个二维数组来存储每个位置的方块
+  const tileGrid = Array(currentLevel.height).fill(0).map(() => 
+    Array(currentLevel.width).fill(null)
+  );
+
+  // 将方块放入对应的位置
+  board.forEach(tile => {
+    if (tile.y >= 0 && tile.y < currentLevel.height && 
+        tile.x >= 0 && tile.x < currentLevel.width) {
+      tileGrid[tile.y][tile.x] = tile;
+    }
+  });
 
   useEffect(() => {
     const checkScroll = () => {
@@ -933,6 +1323,18 @@ const LianLianKan: React.FC = () => {
     };
   }, []);
 
+  const handleLevelSelect = (levelId: number) => {
+    setGameState(prev => ({
+      ...prev,
+      currentLevel: levelId,
+      score: 0,
+      timeLeft: levels[levelId - 1].timeLimit,
+      isGameOver: false,
+      isPaused: false,
+    }));
+    setShowLevelSelect(false);
+  };
+
   if (!gameStarted) {
     return (
       <GameContainer $isAuth>
@@ -941,8 +1343,18 @@ const LianLianKan: React.FC = () => {
     );
   }
 
+  if (showLevelSelect) {
+    return (
+      <LevelSelect
+        user={user!}
+        onLevelSelect={handleLevelSelect}
+        onBack={() => setShowLevelSelect(false)}
+      />
+    );
+  }
+
   return (
-    <GameContainer>
+    <GameContainer ref={gameContainerRef}>
       <LeftPanel>
         <GameTitle>连连看</GameTitle>
         {user && (
@@ -956,14 +1368,19 @@ const LianLianKan: React.FC = () => {
                 <span>最高关卡</span>
                 <span>{user.maxLevel}</span>
               </UserInfoItem>
-              <LogoutButton onClick={handleLogout}>
-                退出登录
-              </LogoutButton>
+              <ButtonContainer>
+                <LevelSelectButton onClick={() => setShowLevelSelect(true)}>
+                  <span>🎮</span> 选择关卡
+                </LevelSelectButton>
+                <LogoutButton onClick={handleLogout}>
+                  <span>🚪</span> 退出登录
+                </LogoutButton>
+              </ButtonContainer>
             </UserCard>
             <GameStats>
               <StatItem>
                 <span>关卡</span>
-                <span>{currentLevel.name}</span>
+                <span>第{gameState.currentLevel}关 - {currentLevel.name}</span>
               </StatItem>
               <StatItem>
                 <span>分数</span>
@@ -988,20 +1405,31 @@ const LianLianKan: React.FC = () => {
         <GameBoard 
           width={currentLevel.width} 
           height={currentLevel.height}
+          $rotation={boardRotation}
           className="game-board"
         >
-          {board.map(tile => (
-            <TileButton
-              key={tile.id}
-              $isSelected={tile.isSelected}
-              $isMatched={tile.isMatched}
-              $isInvalid={invalidTile?.id === tile.id}
-              $isHint={hintTiles[0]?.id === tile.id || hintTiles[1]?.id === tile.id}
-              onClick={() => handleTileClick(tile)}
-            >
-              {getEmoji(tile.type)}
-            </TileButton>
-          ))}
+          {boardLayout.map((row, y) =>
+            row.map((isValid, x) => {
+              const tile = tileGrid[y][x];
+              const isValidPosition = isValid && tile;
+              return (
+                <TileButton
+                  key={`${x}-${y}`}
+                  $isSelected={tile?.isSelected || false}
+                  $isMatched={tile?.isMatched || false}
+                  $isInvalid={invalidTile?.id === tile?.id}
+                  $isHint={hintTiles[0]?.id === tile?.id || hintTiles[1]?.id === tile?.id}
+                  $isDisabled={!isValidPosition}
+                  $isFrozen={tile?.isFrozen}
+                  $isFading={tile?.isFading}
+                  $rotation={tile?.rotation}
+                  onClick={() => tile && !tile.isMatched && handleTileClick(tile)}
+                >
+                  {isValidPosition && !tile.isMatched ? getEmoji(tile.type) : ''}
+                </TileButton>
+              );
+            })
+          )}
         </GameBoard>
       </MainContent>
 
@@ -1036,19 +1464,14 @@ const LianLianKan: React.FC = () => {
           $isExpanded={isRulesExpanded}
         >
           <h3>
-            游戏规则
+            {rulesTitle}
             <span>▼</span>
           </h3>
           <div className={`rules-content ${isRulesExpanded ? 'expanded' : ''}`}>
             <ul>
-              <li>点击两个相同的图案进行配对</li>
-              <li>配对的图案必须能够通过不超过两个转角的路径连接</li>
-              <li>连接路径上不能有其他未消除的图案阻挡</li>
-              <li>成功配对后图案会消失</li>
-              <li>消除所有图案即可通关</li>
-              <li>5秒未操作会自动提示可配对的图案</li>
-              <li>剩余时间越多，获得的分数越高</li>
-              <li>时间耗尽或无法继续配对则游戏结束</li>
+              {currentRules.map((rule, index) => (
+                <li key={index}>{rule}</li>
+              ))}
             </ul>
           </div>
         </GameRules>
@@ -1058,7 +1481,7 @@ const LianLianKan: React.FC = () => {
         <>
           <Overlay />
           <Modal>
-            <h2>{board.every(t => t.isMatched) ? '恭喜通关！' : '游戏结束'}</h2>
+            <h2>{board.every(t => t.isMatched) ? `恭喜通过第${gameState.currentLevel}关！` : '游戏结束'}</h2>
             <p>最终得分: {gameState.score}</p>
             <ButtonGroup>
               <Button onClick={() => {
@@ -1074,6 +1497,9 @@ const LianLianKan: React.FC = () => {
               }}>
                 重新开始
               </Button>
+              <LevelSelectButton onClick={() => setShowLevelSelect(true)}>
+                选择关卡
+              </LevelSelectButton>
             </ButtonGroup>
           </Modal>
         </>
