@@ -14,6 +14,12 @@ const GameContainer = styled.div<{ $isAuth?: boolean }>`
   color: white;
   position: relative;
   padding: 20px;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    padding: 10px;
+    gap: 10px;
+  }
 `;
 
 const LeftPanel = styled.div`
@@ -22,6 +28,12 @@ const LeftPanel = styled.div`
   display: flex;
   flex-direction: column;
   gap: 20px;
+
+  @media (max-width: 768px) {
+    width: 100%;
+    margin-right: 0;
+    gap: 10px;
+  }
 `;
 
 const UserCard = styled.div`
@@ -105,6 +117,12 @@ const MainContent = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  min-height: 0;
+
+  @media (max-width: 768px) {
+    margin: 10px 0;
+  }
 `;
 
 const GameTitle = styled.h1`
@@ -118,6 +136,11 @@ const GameTitle = styled.h1`
   border-radius: 12px;
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+
+  @media (max-width: 768px) {
+    font-size: 1.8rem;
+    padding: 10px;
+  }
 `;
 
 const GameBoard = styled.div<{ width: number; height: number }>`
@@ -131,11 +154,26 @@ const GameBoard = styled.div<{ width: number; height: number }>`
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(${props => props.width}, minmax(40px, 1fr));
+    grid-template-rows: repeat(${props => props.height}, minmax(40px, 1fr));
+    gap: 3px;
+    padding: 10px;
+    width: 95vw;
+    max-width: 400px;
+  }
 `;
 
 const RightPanel = styled.div`
   width: 260px;
   margin-left: 20px;
+
+  @media (max-width: 768px) {
+    width: 100%;
+    margin-left: 0;
+    order: -1;
+  }
 `;
 
 const SoundControls = styled.div`
@@ -334,6 +372,13 @@ const Button = styled.button`
   transition: all 0.2s ease;
   margin: 0 10px;
 
+  @media (max-width: 768px) {
+    padding: 10px 20px;
+    font-size: 1rem;
+    margin: 0;
+    width: 100%;
+  }
+
   &:hover {
     background: #45a049;
     transform: translateY(-2px);
@@ -348,6 +393,12 @@ const ButtonGroup = styled.div`
   display: flex;
   gap: 10px;
   margin-top: 20px;
+  justify-content: center;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 8px;
+  }
 `;
 
 const Modal = styled.div`
@@ -362,10 +413,18 @@ const Modal = styled.div`
   color: #333;
   text-align: center;
   z-index: 1000;
+  width: 90%;
+  max-width: 400px;
+
+  @media (max-width: 768px) {
+    padding: 20px;
+    width: 85%;
+  }
 
   h2 {
     margin-bottom: 20px;
     color: #2d3748;
+    font-size: 1.5rem;
   }
 
   p {
@@ -469,6 +528,15 @@ const TileButton = styled.button<{
   transform: ${props => (props.$isSelected || props.$isInvalid) ? 'scale(0.95)' : 'scale(1)'};
   animation: ${props => props.$isHint ? css`${glowPulse} 1.8s ease-in-out infinite` : 'none'};
   
+  @media (max-width: 768px) {
+    font-size: 20px;
+    border-radius: 6px;
+    
+    &:active {
+      transform: scale(0.95);
+    }
+  }
+
   &:hover {
     transform: ${props => props.$isMatched ? 'none' : (props.$isSelected || props.$isInvalid) ? 'scale(0.95)' : 'scale(1.05)'};
     box-shadow: ${props => {
@@ -853,6 +921,17 @@ const LianLianKan: React.FC = () => {
     window.addEventListener('resize', checkScroll);
     return () => window.removeEventListener('resize', checkScroll);
   }, [currentLevel.width, currentLevel.height]);
+
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'viewport';
+    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+    document.head.appendChild(meta);
+
+    return () => {
+      document.head.removeChild(meta);
+    };
+  }, []);
 
   if (!gameStarted) {
     return (
