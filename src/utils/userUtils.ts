@@ -44,11 +44,24 @@ export const updateUserProgress = (username: string, level: number, score: numbe
   const users = getUsers();
   const user = users[username];
   if (user) {
+    // 更新最高关卡
     user.maxLevel = Math.max(user.maxLevel, level);
+    // 更新关卡最高分
+    if (!user.highScores) {
+      user.highScores = {};
+    }
     user.highScores[level] = Math.max(score, user.highScores[level] || 0);
+    
+    // 保存到本地存储
     saveUsers(users);
-    // 更新当前会话中的用户信息
+    // 更新当前会话
     saveSession(user);
+
+    // 触发自定义事件通知其他组件
+    const event = new CustomEvent('userProgressUpdated', { 
+      detail: { username, level, score, user } 
+    });
+    window.dispatchEvent(event);
   }
 };
 

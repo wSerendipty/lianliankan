@@ -79,9 +79,9 @@ export const levels: Level[] = Array(99).fill(null).map((_, index) => {
     name: `关卡 ${level}`,
     width: 7,
     height: 6,
-    timeLimit: 300 - difficulty * 10, // 随难度减少时间
-    baseScore: 1000 + difficulty * 200, // 随难度增加基础分数
-    tileTypes: Math.min(8 + Math.floor(difficulty / 2), 15), // 随难度增加方块类型，最多15种
+    timeLimit: Math.max(180, 300 - difficulty * 15), // 减少时间限制，最低180秒
+    baseScore: 3000 + (difficulty * 500) + (level * 20), // 大幅提高基础分数，并与关卡数相关
+    tileTypes: Math.min(10 + Math.floor(difficulty / 2), 18), // 增加方块类型，最多18种
     mode: GameMode.CLASSIC,
     specialRules: [],
   };
@@ -96,30 +96,29 @@ export const levels: Level[] = Array(99).fill(null).map((_, index) => {
 
   // 设置游戏模式 - 新的模式分配逻辑
   const modeDistribution = [
-    GameMode.CLASSIC,    // 1-15关：经典模式为主
-    GameMode.TIME_RUSH,  // 16-30关：开始出现限时冲刺
-    GameMode.MOVING,     // 31-45关：加入移动方块
-    GameMode.ROTATING,   // 46-60关：加入旋转玩法
-    GameMode.FADING,     // 61-75关：加入渐隐玩法
-    GameMode.FROZEN      // 76-99关：加入冰冻玩法
+    GameMode.CLASSIC,    // 1-10关：经典模式为主
+    GameMode.TIME_RUSH,  // 11-20关：开始出现限时冲刺
+    GameMode.MOVING,     // 21-30关：加入移动方块
+    GameMode.ROTATING,   // 31-40关：加入旋转玩法
+    GameMode.FADING,     // 41-50关：加入渐隐玩法
+    GameMode.FROZEN      // 51-99关：加入冰冻玩法
   ];
 
   // 确定当前关卡可用的模式池
-  const availableModes = modeDistribution.slice(0, Math.floor((level - 1) / 15) + 1);
+  const availableModes = modeDistribution.slice(0, Math.floor((level - 1) / 10) + 1);
   
   // 根据关卡号选择模式
-  if (level <= 15) {
-    // 前15关保持经典模式
+  if (level <= 10) {
+    // 前10关保持经典模式
     config.mode = GameMode.CLASSIC;
   } else {
     // 之后的关卡从可用模式池中选择
-    // 使用关卡号作为种子来确保特定关卡总是获得相同的模式
     const modeIndex = Math.floor(Math.pow(level, 2.5)) % availableModes.length;
     config.mode = availableModes[modeIndex];
   }
 
   // 添加特殊规则
-  if (level > 20) {
+  if (level > 15) { // 提前引入特殊规则
     // 根据模式添加对应的特殊规则
     switch (config.mode) {
       case GameMode.TIME_RUSH:
@@ -140,7 +139,7 @@ export const levels: Level[] = Array(99).fill(null).map((_, index) => {
     }
 
     // 额外的规则组合
-    if (level % 10 === 0) { // 每10关添加额外规则
+    if (level % 8 === 0) { // 每8关添加额外规则，增加规则出现频率
       const extraRules: SpecialRule[] = ['timerDecrease', 'movingTiles', 'rotatingBoard', 'fadingTiles', 'frozenTiles'];
       const currentRules = new Set(config.specialRules);
       
@@ -154,36 +153,40 @@ export const levels: Level[] = Array(99).fill(null).map((_, index) => {
   }
 
   // 调整难度相关参数
-  if (difficulty > 5) {
+  if (difficulty > 4) { // 提前增加网格大小
     config.width = 8;
     config.height = 7;
   }
-  if (difficulty > 8) {
+  if (difficulty > 7) {
     config.width = 9;
     config.height = 8;
+  }
+  if (difficulty > 9) { // 添加更大的网格
+    config.width = 10;
+    config.height = 9;
   }
 
   // 根据模式调整时间和分数
   switch (config.mode) {
     case GameMode.TIME_RUSH:
-      config.timeLimit = Math.max(120, config.timeLimit - 60); // 减少时间限制
-      config.baseScore *= 1.5; // 增加基础分数
+      config.timeLimit = Math.max(90, config.timeLimit - 90); // 进一步减少时间限制
+      config.baseScore *= 1.8; // 增加基础分数倍率
       break;
     case GameMode.MOVING:
-      config.timeLimit += 30; // 增加时间补偿移动难度
-      config.baseScore *= 1.3;
+      config.timeLimit += 20; // 减少时间补偿
+      config.baseScore *= 1.5;
       break;
     case GameMode.ROTATING:
-      config.timeLimit += 45; // 增加时间补偿旋转难度
-      config.baseScore *= 1.4;
+      config.timeLimit += 30; // 减少时间补偿
+      config.baseScore *= 1.6;
       break;
     case GameMode.FADING:
-      config.timeLimit += 20; // 增加时间补偿渐隐难度
-      config.baseScore *= 1.2;
+      config.timeLimit += 15; // 减少时间补偿
+      config.baseScore *= 1.4;
       break;
     case GameMode.FROZEN:
-      config.timeLimit += 40; // 增加时间补偿冰冻难度
-      config.baseScore *= 1.35;
+      config.timeLimit += 25; // 减少时间补偿
+      config.baseScore *= 1.55;
       break;
   }
 

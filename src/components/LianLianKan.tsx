@@ -1125,6 +1125,41 @@ const LianLianKan: React.FC = () => {
     };
   }, [gameState.currentLevel, gameState.isPaused, gameState.isGameOver]);
 
+  // 添加用户状态更新函数
+  const updateUserState = useCallback((updatedUser: User) => {
+    setUser(updatedUser);
+    setGameState(prev => ({
+      ...prev,
+      highScores: updatedUser.highScores,
+    }));
+  }, []);
+
+  // 修改处理关卡完成的逻辑
+  const handleLevelComplete = useCallback((newScore: number) => {
+    if (!user) return;
+
+    const nextLevel = gameState.currentLevel + 1;
+    updateUserProgress(user.username, nextLevel, newScore);
+    
+    // 获取最新的用户数据
+    const users = getUsers();
+    const updatedUser = users[user.username];
+    if (updatedUser) {
+      updateUserState(updatedUser);
+    }
+
+    // 更新游戏状态
+    setGameState(prev => ({
+      ...prev,
+      currentLevel: nextLevel,
+      highScores: {
+        ...prev.highScores,
+        [prev.currentLevel]: Math.max(prev.score, prev.highScores[prev.currentLevel] || 0),
+      },
+    }));
+  }, [user, gameState.currentLevel, updateUserState]);
+
+  // 修改点击处理函数中的关卡完成部分
   const handleTileClick = useCallback(async (tile: Tile) => {
     updateInteractionTime();
     
@@ -1187,11 +1222,6 @@ const LianLianKan: React.FC = () => {
           score: newScore,
         }));
 
-        // 更新用户进度
-        if (user) {
-          updateUserProgress(user.username, gameState.currentLevel, newScore);
-        }
-
         // 检查是否完成关卡
         const isLevelComplete = board.every(t => 
           (t.id === selectedTile.id || t.id === tile.id) ? true : t.isMatched
@@ -1203,21 +1233,19 @@ const LianLianKan: React.FC = () => {
           if (gameState.currentLevel < levels.length) {
             // 延迟进入下一关
             setTimeout(() => {
-              if (user) {
-                updateUserProgress(user.username, gameState.currentLevel + 1, newScore);
-              }
-              setGameState(prev => ({
-                ...prev,
-                currentLevel: prev.currentLevel + 1,
-                highScores: {
-                  ...prev.highScores,
-                  [prev.currentLevel]: Math.max(prev.score, prev.highScores[prev.currentLevel] || 0),
-                },
-              }));
+              handleLevelComplete(newScore);
             }, 1000);
           } else {
             // 完成所有关卡
             audioManager.playSound('gameOver').catch(console.error);
+            if (user) {
+              updateUserProgress(user.username, gameState.currentLevel, newScore);
+              const users = getUsers();
+              const updatedUser = users[user.username];
+              if (updatedUser) {
+                updateUserState(updatedUser);
+              }
+            }
             setGameState(prev => ({
               ...prev,
               isGameOver: true,
@@ -1250,7 +1278,7 @@ const LianLianKan: React.FC = () => {
         setInvalidTile(null);
       }, 500);
     }
-  }, [board, selectedTile, invalidTile, gameState, user, audioManager, updateInteractionTime]);
+  }, [board, selectedTile, invalidTile, gameState, user, audioManager, updateInteractionTime, handleLevelComplete]);
 
   const getEmoji = (type: number) => {
     const emojiCategories = [
@@ -1334,6 +1362,21 @@ const LianLianKan: React.FC = () => {
     }));
     setShowLevelSelect(false);
   };
+
+  // 添加用户进度更新事件监听
+  useEffect(() => {
+    const handleUserProgressUpdate = (event: CustomEvent) => {
+      const { user: updatedUser } = event.detail;
+      if (updatedUser && user && updatedUser.username === user.username) {
+        updateUserState(updatedUser);
+      }
+    };
+
+    window.addEventListener('userProgressUpdated', handleUserProgressUpdate as EventListener);
+    return () => {
+      window.removeEventListener('userProgressUpdated', handleUserProgressUpdate as EventListener);
+    };
+  }, [user, updateUserState]);
 
   if (!gameStarted) {
     return (

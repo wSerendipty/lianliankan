@@ -209,29 +209,144 @@ const generateSimpleBoard = (width: number, height: number, tileTypes: number, s
     .fill(0)
     .map((_, index) => (index % tileTypes) + 1)
     .flatMap(type => [type, type]);
-  
-  const shuffledTypes = shuffleArray(types);
-  const shuffledPositions = shuffleArray(validPositions);
 
-  // 创建方块，确保相同类型的方块不会太靠近
-  const tiles: Tile[] = [];
-  for (let i = 0; i < shuffledPositions.length; i++) {
-    const pos = shuffledPositions[i];
-    tiles.push({
-      id: i,
-      type: shuffledTypes[i],
+  // 尝试生成有效的游戏板
+  let maxAttempts = 100; // 增加尝试次数以获得更好的随机性
+  let validBoard: Tile[] | null = null;
+  let bestBoard: Tile[] | null = null;
+  let maxComplexity = -1;
+
+  while (maxAttempts > 0) {
+    const shuffledTypes = shuffleArray([...types]);
+    const shuffledPositions = shuffleArray([...validPositions]);
+    
+    const board: Tile[] = shuffledPositions.map((pos, index) => ({
+      id: index + 1,
       x: pos.x,
       y: pos.y,
-      isSelected: false,
+      type: shuffledTypes[index],
       isMatched: false,
-    });
+      isSelected: false,
+    }));
+
+    // 验证游戏板是否可完成
+    if (isCompletable(board, width, height)) {
+      // 计算游戏板的复杂度
+      const complexity = calculateBoardComplexity(board, width, height);
+      
+      // 如果这是最复杂的有效游戏板，保存它
+      if (complexity > maxComplexity) {
+        maxComplexity = complexity;
+        bestBoard = [...board];
+      }
+      
+      // 如果复杂度达到理想水平，直接使用这个游戏板
+      if (complexity >= 0.7) {
+        validBoard = board;
+        break;
+      }
+    }
+
+    maxAttempts--;
   }
 
-  // 最后一次打乱，但保持一定距离
-  return shuffleArray(tiles).map((tile, index) => ({
-    ...tile,
-    id: index,
+  // 使用最佳游戏板或最后一个有效的游戏板
+  if (bestBoard) {
+    return bestBoard;
+  }
+
+  // 如果没有找到足够复杂的游戏板，使用基础的随机布局
+  const shuffledPositions = shuffleArray([...validPositions]);
+  const shuffledTypes = shuffleArray([...types]);
+  return shuffledPositions.map((pos, index) => ({
+    id: index + 1,
+    x: pos.x,
+    y: pos.y,
+    type: shuffledTypes[index],
+    isMatched: false,
+    isSelected: false,
   }));
+};
+
+// 计算游戏板的复杂度
+const calculateBoardComplexity = (board: Tile[], width: number, height: number): number => {
+  let totalPaths = 0;
+  let directPaths = 0;
+  let oneCornerPaths = 0;
+  let twoCornerPaths = 0;
+  let totalPairs = 0;
+
+  // 遍历所有可能的配对
+  for (let i = 0; i < board.length; i++) {
+    for (let j = i + 1; j < board.length; j++) {
+      const tile1 = board[i];
+      const tile2 = board[j];
+      
+      if (tile1.type === tile2.type) {
+        totalPairs++;
+        const path = canConnect(tile1, tile2, board, width, height);
+        
+        if (path) {
+          totalPaths++;
+          if (path.corners.length === 0) {
+            directPaths++;
+          } else if (path.corners.length === 1) {
+            oneCornerPaths++;
+          } else {
+            twoCornerPaths++;
+          }
+        }
+      }
+    }
+  }
+
+  if (totalPairs === 0) return 0;
+
+  // 计算复杂度分数
+  const directPathRatio = directPaths / totalPaths;
+  const oneCornerRatio = oneCornerPaths / totalPaths;
+  const twoCornerRatio = twoCornerPaths / totalPaths;
+
+  // 复杂度评分：直接路径降低复杂度，转角路径增加复杂度
+  // 两个转角的路径权重最高
+  const complexity = (
+    twoCornerRatio * 0.6 +    // 两个转角路径的权重
+    oneCornerRatio * 0.3 +    // 一个转角路径的权重
+    (1 - directPathRatio) * 0.1  // 直接路径越少越好
+  );
+
+  return complexity;
+};
+
+// 验证游戏板是否可完成
+const isCompletable = (board: Tile[], width: number, height: number): boolean => {
+  const unmatchedTiles = board.filter(tile => !tile.isMatched);
+  const visited = new Set<number>();
+
+  for (let i = 0; i < unmatchedTiles.length; i++) {
+    if (visited.has(i)) continue;
+    
+    const tile1 = unmatchedTiles[i];
+    let hasMatch = false;
+
+    for (let j = i + 1; j < unmatchedTiles.length; j++) {
+      if (visited.has(j)) continue;
+
+      const tile2 = unmatchedTiles[j];
+      if (tile1.type === tile2.type && canConnect(tile1, tile2, board, width, height)) {
+        hasMatch = true;
+        visited.add(i);
+        visited.add(j);
+        break;
+      }
+    }
+
+    if (!hasMatch) {
+      return false;
+    }
+  }
+
+  return visited.size === unmatchedTiles.length;
 };
 
 const hasDirectPath = (start: Tile, end: Tile, board: Tile[]): boolean => {
